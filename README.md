@@ -78,8 +78,3 @@ make clean
 
 This will remove the `galsim` executable.
 
-## Notes
-
-- Ensure the paths to input files and reference output files are correct.
-- Modify the `Makefile` if different parameters or input files are required for different simulations.
-- Make sure the `cgf` tool is properly compiled and in the correct location for comparison.
