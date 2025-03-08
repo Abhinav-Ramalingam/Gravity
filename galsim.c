@@ -100,7 +100,7 @@ int main(int ac, char *av[]) {
     start = clock();
 
     // Phase 3: DataStructure to File
-    int outputfd = open("results.gal", O_RDWR | O_CREAT, 0666);
+    int outputfd = open("result.gal", O_RDWR | O_CREAT, 0666);
     if(outputfd == -1) {
         printf("File create error!\n");
         return 1;
