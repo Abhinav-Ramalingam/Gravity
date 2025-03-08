@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <time.h>
 #include <math.h>
 #include <string.h>
@@ -9,7 +7,7 @@
 #define eps 1e-3
 
 typedef struct {
-    double *x, *y, *mass, *vx, *vy;
+    double *x, *y, *mass, *vx, *vy, *brightness;
 } ParticleData;
 
 int main(int ac, char *av[]) {
@@ -34,39 +32,43 @@ int main(int ac, char *av[]) {
     particles.mass = (double *) malloc(N * sizeof(double));
     particles.vx = (double *) malloc(N * sizeof(double));
     particles.vy = (double *) malloc(N * sizeof(double));
+    particles.brightness = (double *) malloc(N * sizeof(double));
 
-    if (!particles.x || !particles.y || !particles.mass || !particles.vx || !particles.vy) {
+    if (!particles.x || !particles.y || !particles.mass || !particles.vx || !particles.vy || !particles.brightness) {
         printf("Memory allocation error!\n");
         return 1;
     }
 
-    int inputfd = open(inputfile, O_RDONLY);
-    if(inputfd == -1) {
+    FILE *inputfd = fopen(inputfile, "rb");
+    if (inputfd == NULL) {
         printf("File open error!\n");
         return 1;
     }
 
-    read(inputfd, particles.x, N * sizeof(double));
-    read(inputfd, particles.y, N * sizeof(double));
-    read(inputfd, particles.mass, N * sizeof(double));
-    read(inputfd, particles.vx, N * sizeof(double));
-    read(inputfd, particles.vy, N * sizeof(double));
+    for (int i = 0; i < N; i++) {
+        fread(&particles.x[i], sizeof(double), 1, inputfd);
+        fread(&particles.y[i], sizeof(double), 1, inputfd);
+        fread(&particles.mass[i], sizeof(double), 1, inputfd);
+        fread(&particles.vx[i], sizeof(double), 1, inputfd);
+        fread(&particles.vy[i], sizeof(double), 1, inputfd);
+        fread(&particles.brightness[i], sizeof(double), 1, inputfd);
+    }
 
-    close(inputfd);
+    fclose(inputfd);
 
     printf("Time for File to DS(s): %lf\n", (double) (clock() - start) / CLOCKS_PER_SEC);
     start = clock();
 
     // Phase 2: Processing
-    int instant = 0, i = 0, j = 0;
+    int instant = 0;
     while (instant < timesteps) {
-        for (i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++) {
             double mi = particles.mass[i];
             double dmi = deltaT * mi;
             double x = particles.x[i], y = particles.y[i];
             double a_x = 0.0, a_y = 0.0;
 
-            for (j = i + 1; j < N; j++) {
+            for (int j = i + 1; j < N; j++) {
                 double mj = particles.mass[j];
                 double dx = particles.x[j] - x;
                 double dy = particles.y[j] - y;
@@ -100,25 +102,29 @@ int main(int ac, char *av[]) {
     start = clock();
 
     // Phase 3: DataStructure to File
-    int outputfd = open("result.gal", O_RDWR | O_CREAT, 0666);
-    if(outputfd == -1) {
+    FILE *outputfd = fopen("result.gal", "wb");
+    if (outputfd == NULL) {
         printf("File create error!\n");
         return 1;
     }
 
-    write(outputfd, particles.x, N * sizeof(double));
-    write(outputfd, particles.y, N * sizeof(double));
-    write(outputfd, particles.mass, N * sizeof(double));
-    write(outputfd, particles.vx, N * sizeof(double));
-    write(outputfd, particles.vy, N * sizeof(double));
+    for (int i = 0; i < N; i++) {
+        fwrite(&particles.x[i], sizeof(double), 1, outputfd);
+        fwrite(&particles.y[i], sizeof(double), 1, outputfd);
+        fwrite(&particles.mass[i], sizeof(double), 1, outputfd);
+        fwrite(&particles.vx[i], sizeof(double), 1, outputfd);
+        fwrite(&particles.vy[i], sizeof(double), 1, outputfd);
+        fwrite(&particles.brightness[i], sizeof(double), 1, outputfd);
+    }
 
-    close(outputfd);
+    fclose(outputfd);
 
     free(particles.x);
     free(particles.y);
     free(particles.mass);
     free(particles.vx);
     free(particles.vy);
+    free(particles.brightness);
 
     printf("Time for DS to File(s): %lf\n", (double) (clock() - start) / CLOCKS_PER_SEC);
 
