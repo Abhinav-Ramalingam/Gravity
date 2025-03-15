@@ -13,6 +13,8 @@ typedef struct {
 
 typedef struct {
     ParticleData *particles;
+    double *vx_sp;
+    double *vy_sp;
     double deltaT;
     int N, start, end;
 } ThreadData;
@@ -20,6 +22,7 @@ typedef struct {
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void *compute_forces(void *arg) {
+    
     ThreadData *data = (ThreadData *)arg;
     double deltaT = data->deltaT;
     int N = data->N;
@@ -31,6 +34,8 @@ void *compute_forces(void *arg) {
     double *mass = data->particles->mass;
     double *vx = data->particles->vx;
     double *vy = data->particles->vy;
+    double *vx_sp = data->vx_sp;
+    double *vy_sp = data->vy_sp;
 
     double *local_vx = (double *)calloc(N, sizeof(double));
     double *local_vy = (double *)calloc(N, sizeof(double));
@@ -41,7 +46,7 @@ void *compute_forces(void *arg) {
     }
 
     for (int i = start; i < end; i++) {
-        printf(".");
+         
         double mi = mass[i];
         double dmi = deltaT * mi;
         double xi = x[i], yi = y[i];
@@ -56,27 +61,27 @@ void *compute_forces(void *arg) {
             double fx = force * dx;
             double fy = force * dy;
 
-           
             a_x += fx * mass[j];
             a_y += fy * mass[j];
 
-
+            // Update local velocities for particle j
             local_vx[j] -= dmi * fx;
             local_vy[j] -= dmi * fy;
         }
-        
 
+        // Update local velocities for particle i
         local_vx[i] += deltaT * a_x;
         local_vy[i] += deltaT * a_y;
-
-        pthread_mutex_lock(&mutex);
-        printf("\n");
-        vx[i] += local_vx[i];
-        vy[i] += local_vy[i];
-        x[i] += deltaT * vx[i];
-        y[i] += deltaT * vy[i];
-        pthread_mutex_unlock(&mutex);
     }
+
+
+    // Safely add local velocities to shared velocity arrays
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < N; i++) {
+        vx_sp[i] += local_vx[i];
+        vy_sp[i] += local_vy[i];
+    }
+    pthread_mutex_unlock(&mutex);
 
     free(local_vx);
     free(local_vy);
@@ -129,38 +134,55 @@ int main(int argc, char *argv[]) {
     printf("Time for File to DS(s): %lf\n", (double)(omp_get_wtime() - start));
     start = omp_get_wtime();
 
+    double *vy_shared = (double *)calloc(N, sizeof(double));
+    double *vx_shared = (double *)calloc(N, sizeof(double));
+
     pthread_t threads[n_threads];
     ThreadData thread_data[n_threads];
 
     int rows = 2 * N / (n_threads * (n_threads + 1));
     int end = 0;
 
-    int ts;
-    for (ts = 0; ts < timesteps; ts++) {
+    for (int ts = 0; ts < timesteps; ts++) {
+        end = 0;
         for (int t = 0; t < n_threads; t++) {
             int rows_t = rows * (t + 1);
             int start = end;
             end = (t == n_threads - 1) ? N : start + rows_t;
+
+            //printf("%d %d\n",start, end);
 
             thread_data[t].N = N;
             thread_data[t].particles = &particles;
             thread_data[t].deltaT = deltaT;
             thread_data[t].start = start;
             thread_data[t].end = end;
+            thread_data[t].vx_sp = vx_shared;
+            thread_data[t].vy_sp = vy_shared;
 
             pthread_create(&threads[t], NULL, compute_forces, &thread_data[t]);
         }
+        //printf("-------------------\n");
 
         for (int t = 0; t < n_threads; t++) {
             pthread_join(threads[t], NULL);
         }
-    }
 
-    printf("Current timestep is: %d\n", ts);
+        // After all threads finish, apply the shared velocity to the global velocity
+        for (int i = 0; i < N; i++) {
+            particles.vx[i] += vx_shared[i];
+            particles.vy[i] += vy_shared[i];
+            particles.x[i] += deltaT * particles.vx[i];
+            particles.y[i] += deltaT * particles.vy[i];
+        }
+
+        // Reset shared velocities for the next timestep
+        memset(vx_shared, 0, N * sizeof(double));
+        memset(vy_shared, 0, N * sizeof(double));
+    }
 
     printf("Time for Processing(s): %lf\n", (double)(omp_get_wtime() - start));
     start = omp_get_wtime();
-
 
     FILE *outputfd = fopen("result.gal", "wb");
     if (!outputfd) {
@@ -178,16 +200,12 @@ int main(int argc, char *argv[]) {
     }
     fclose(outputfd);
 
-    printf("Freeing particles.x at address: %p\n", particles.x);
-    free(particles.x);
-    printf("Freeing particles.y at address: %p\n", particles.y);
-    free(particles.y);
-    printf("Freeing particles.mass at address: %p\n", particles.mass);
-    free(particles.mass);
+    if (particles.x) free(particles.x);
+    if (particles.y) free(particles.y);
+    if (particles.mass) free(particles.mass);
     free(particles.vx);
     free(particles.vy);
     free(particles.brightness);
-
 
     printf("Time for DS to File(s): %lf\n", (double)(omp_get_wtime() - start));
 
