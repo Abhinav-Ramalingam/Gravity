@@ -184,7 +184,7 @@ int main(int argc, char *argv[]) {
     printf("Time for Processing(s): %lf\n", (double)(omp_get_wtime() - start));
     start = omp_get_wtime();
 
-    FILE *outputfd = fopen("result.gal", "wb");
+    FILE *outputfd = fopen("resultpt.gal", "wb");
     if (!outputfd) {
         printf("File create error!\n");
         return -1;
