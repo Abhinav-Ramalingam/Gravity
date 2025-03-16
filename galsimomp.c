@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
         double G = 100.0 / N;
 
         // Compute forces using OpenMP with reduction on shared velocity changes
-        #pragma omp parallel for schedule(static, 8) reduction(+:vx_shared[:N], vy_shared[:N])
+        #pragma omp parallel for schedule(dynamic) reduction(+:vx_shared[:N], vy_shared[:N])
         for (int i = 0; i < N; i++) {
             double mi = particles.mass[i];
             double dmi = deltaT * mi;
@@ -97,11 +97,6 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < N; i++) {
             particles.vx[i] += vx_shared[i];
             particles.vy[i] += vy_shared[i];
-        }
-
-        // Update positions in parallel
-        #pragma omp parallel for
-        for (int i = 0; i < N; i++) {
             particles.x[i] += deltaT * particles.vx[i];
             particles.y[i] += deltaT * particles.vy[i];
         }
